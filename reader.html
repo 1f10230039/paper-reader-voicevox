@@ -246,8 +246,9 @@ body.pip #away{display:flex}
     <div class="f">
       <label>VOICEVOX</label>
       <div id="vvState"><span class="dot" id="vvDot"></span><span id="vvMsg">確認中…</span></div>
-      <div class="hint">音声合成：<b>VOICEVOX:ずんだもん</b> ほか（VOICEVOX ENGINE の話者）。
-        音源の利用規約により、作成した音声を公開する際は「VOICEVOX:話者名」のクレジット表記が必要です。</div>
+      <div class="hint" id="credit">音声合成：<b id="creditName">VOICEVOX</b>。
+        話者ごとに利用規約があります。作成した音声を公開する際は「VOICEVOX:話者名」の
+        クレジット表記が必要です（規約は VOICEVOX 公式サイトの利用規約ページを参照）。</div>
     </div>
     <div class="f">
       <label>英単語の読み<span class="val" id="dictCount"></span></label>
@@ -1025,6 +1026,12 @@ function updateWho(){
   const o = el.voice.selectedOptions[0];
   el.who.textContent = o ? o.textContent.replace(/ \(ノーマル\)/, '') : '';
   el.who.title = o ? o.textContent : '';
+  // 設定パネルのクレジット表記は、選んでいる話者に合わせる（音源利用規約の「VOICEVOX:話者名」の形）
+  const credit = document.getElementById('creditName');
+  if (credit){
+    const isVV = o && o.value.startsWith('vv:');
+    credit.textContent = isVV ? 'VOICEVOX:' + o.textContent.replace(/ \(.+\)$/, '') : 'ブラウザ内蔵の音声';
+  }
 }
 
 synth.onvoiceschanged = fillVoices;

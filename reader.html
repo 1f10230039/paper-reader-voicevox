@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>読み上げ</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%236ab2ff'/%3E%3Cstop offset='1' stop-color='%232a74d6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='22' fill='url(%23g)'/%3E%3Crect x='17' y='19' width='38' height='62' rx='5' fill='%23fff'/%3E%3Cpath d='M25 33h22M25 45h22M25 57h22M25 69h13' stroke='%233c82dc' stroke-width='5' stroke-linecap='round'/%3E%3Cg stroke='%23fff' stroke-width='6.5' fill='none' stroke-linecap='round'%3E%3Cpath d='M67 37.88A14 14 0 0 1 67 62.12'/%3E%3Cpath d='M74.34 29.52A25 25 0 0 1 74.34 70.48'/%3E%3C/g%3E%3C/svg%3E">
+<style id="appstyle">
+:root{
+  --bg:#1b1d21; --panel:#24272c; --line:#33373d; --text:#e6e8ea; --dim:#9aa0a6;
+  --accent:#5aa9ff; --hl-bg:#2f4a6b; --hl-text:#ffffff; --btn:#2e3237; --btn-h:#3a3f46;
+  --ok:#4ec9a0; --warn:#e2b341; --ng:#e07a7a;
+}
+body.light{
+  --bg:#fbfbfa; --panel:#ffffff; --line:#e2e2e0; --text:#22242a; --dim:#71767c;
+  --accent:#1f6fd0; --hl-bg:#d6e6fb; --hl-text:#10233a; --btn:#eff0f1; --btn-h:#e2e4e6;
+  --ok:#1a9c76; --warn:#a97c10; --ng:#c1443f;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:"Yu Gothic UI","Meiryo",system-ui,sans-serif;
+  overflow:hidden;
+}
+#app{display:flex; flex-direction:column; height:100vh; background:var(--bg); position:relative}
+
+/* ===== ヘッダー ===== */
+header{
+  flex:0 0 auto; background:var(--panel); border-bottom:1px solid var(--line);
+  padding:6px 8px 4px; user-select:none;
+}
+/* 横に広げても間延びしないよう、ヘッダーと本文を同じ幅に揃えて中央寄せする */
+.row,.prow,#read{max-width:46em; margin-left:auto; margin-right:auto; width:100%}
+.row{display:flex; align-items:center; gap:4px; flex-wrap:nowrap}
+button{
+  font:inherit; color:var(--text); background:var(--btn); border:1px solid var(--line);
+  border-radius:6px; cursor:pointer; padding:0; line-height:1;
+  display:flex; align-items:center; justify-content:center;
+}
+button:hover:not(:disabled){background:var(--btn-h)}
+button:disabled{opacity:.35; cursor:default}
+.ico{width:30px; height:30px; font-size:14px; flex:0 0 auto}
+#play{width:38px; height:30px; background:var(--accent); border-color:transparent; color:#fff; font-size:15px}
+#play:hover:not(:disabled){filter:brightness(1.12)}
+#play.load{font-size:0; position:relative}
+#play.load::after{
+  content:""; position:absolute; width:13px; height:13px; border-radius:50%;
+  border:2px solid rgba(255,255,255,.35); border-top-color:#fff; animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spacer{flex:1 1 auto}
+.on{background:var(--accent)!important; border-color:transparent!important; color:#fff!important}
+
+/* ヘッダーの速度スライダー */
+.rate{display:flex; align-items:center; gap:5px; flex:1 1 auto; min-width:0; margin:0 5px}
+#hrate{flex:1 1 auto; min-width:44px; width:auto}
+#rateVal{
+  font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums;
+  flex:0 0 auto; width:27px; text-align:right; cursor:pointer;
+}
+#rateVal:hover{color:var(--text)}
+
+.prow{display:flex; align-items:center; gap:6px; margin-top:5px}
+/* 幅が足りないときはスライダーから削る。ボタンは絶対に折り返させない */
+@media (max-width:330px){ #hrate{display:none} #rateVal{width:auto; padding:0 3px} }
+@media (max-width:290px){ #who{display:none} }
+#bar{
+  flex:1 1 auto; height:5px; background:var(--btn); border-radius:3px;
+  cursor:pointer; position:relative; overflow:hidden;
+}
+#fill{position:absolute; inset:0 auto 0 0; width:0; background:var(--accent); border-radius:3px}
+#who{
+  font-size:10px; color:var(--dim); flex:0 0 auto; max-width:88px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+#count{font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums; flex:0 0 auto}
+
+/* ===== 本文 ===== */
+/* 下余白は現在文を中央に寄せるためのもの。低いウィンドウで本文が潰れないよう上限を付ける */
+#body{flex:1 1 auto; overflow-y:auto; padding:10px 12px min(40vh, 220px); min-height:0}
+#body::-webkit-scrollbar{width:9px}
+#body::-webkit-scrollbar-thumb{background:var(--line); border-radius:5px}
+#read{font-size:15px; line-height:1.85; letter-spacing:.02em; word-break:break-word}
+#read p{margin:0 0 .8em}
+.s{cursor:pointer; border-radius:3px; padding:1px 0}
+.s:hover{background:var(--btn-h)}
+.s.cur{background:var(--hl-bg); color:var(--hl-text); box-shadow:0 0 0 2px var(--hl-bg)}
+.s.done{color:var(--dim)}
+/* 本文中の英単語。右クリック / Ctrl+クリックで読みを設定できる */
+.w{font-style:normal; border-bottom:1px dotted; border-color:inherit; opacity:.9}
+.w:hover{background:var(--accent); color:#fff; border-radius:2px}
+
+/* 読みの即時編集バー */
+#wbar{
+  position:absolute; left:6px; right:6px; bottom:6px; z-index:30;
+  display:none; align-items:center; gap:5px; padding:6px;
+  background:var(--panel); border:1px solid var(--accent); border-radius:8px;
+  box-shadow:0 6px 22px rgba(0,0,0,.45);
+}
+#wbar.show{display:flex}
+#wbarEn{
+  font-size:11px; color:var(--accent); font-weight:600; flex:0 0 auto;
+  max-width:34%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+#wbar input{
+  flex:1 1 auto; min-width:0; font:13px inherit; padding:5px 7px;
+  background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:5px;
+}
+#wbar input.bad{border-color:var(--ng)}
+#wbar button{height:28px; padding:0 9px; font-size:12px; flex:0 0 auto}
+#wbarSave{background:var(--accent); color:#fff; border-color:transparent}
+.dw-add{margin-top:6px; padding-top:6px; border-top:1px dashed var(--line)}
+.dw-add input:first-child{flex:0 0 38%}
+.dw-add button{width:26px; font-size:14px; color:var(--accent)}
+
+/* 編集 */
+#edit{
+  display:none; flex:1 1 auto; flex-direction:column; padding:8px; gap:8px;
+  width:100%; max-width:48em; margin-left:auto; margin-right:auto; min-height:0;
+}
+#edit.show{display:flex}
+#body.hide{display:none}
+textarea{
+  flex:1 1 auto; width:100%; resize:none; font:13px/1.7 inherit;
+  background:var(--panel); color:var(--text); border:1px solid var(--line);
+  border-radius:8px; padding:9px;
+}
+textarea:focus{outline:2px solid var(--accent); outline-offset:-1px}
+.erow{display:flex; gap:6px; align-items:center}
+#load{flex:1 1 auto; height:34px; background:var(--accent); color:#fff; border-color:transparent; font-size:13px; font-weight:600}
+.chk{display:flex; align-items:center; gap:4px; font-size:11px; color:var(--dim); cursor:pointer; white-space:nowrap}
+.hint{font-size:11px; color:var(--dim); line-height:1.6}
+
+/* ===== 設定 ===== */
+#pane{
+  display:none; position:absolute; inset:0; background:var(--bg);
+  z-index:20; overflow-y:auto;
+  padding:10px max(12px, calc((100% - 46em) / 2));
+}
+#pane.show{display:block}
+.ph{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px}
+.ph b{font-size:13px}
+.f{margin-bottom:13px}
+.f label{display:block; font-size:11px; color:var(--dim); margin-bottom:4px}
+select,input[type=range]{width:100%; font:inherit}
+select{
+  font-size:12px; padding:5px 6px; background:var(--panel); color:var(--text);
+  border:1px solid var(--line); border-radius:6px;
+}
+input[type=range]{
+  -webkit-appearance:none; appearance:none; margin:0; cursor:pointer;
+  height:4px; background:var(--btn); border-radius:2px;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; appearance:none; border:none;
+  width:13px; height:13px; border-radius:50%; background:var(--accent);
+}
+input[type=range]:hover::-webkit-slider-thumb{filter:brightness(1.15)}
+.val{float:right; color:var(--text); font-variant-numeric:tabular-nums}
+kbd{
+  background:var(--btn); border:1px solid var(--line); border-bottom-width:2px;
+  border-radius:4px; padding:1px 5px; font-size:10px; font-family:inherit;
+}
+.keys{font-size:11px; color:var(--dim); line-height:2}
+#vvState{
+  display:flex; align-items:center; gap:6px; font-size:11px;
+  background:var(--panel); border:1px solid var(--line);
+  border-radius:6px; padding:6px 8px; color:var(--dim);
+}
+/* 英単語の読み一覧 */
+#dictList{max-height:210px; overflow-y:auto; margin-bottom:5px}
+#dictList:empty{display:none}
+.dw{display:flex; align-items:center; gap:4px; margin-bottom:4px}
+.dw .en{
+  flex:0 0 38%; font-size:11px; color:var(--dim); overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap;
+}
+.dw input{
+  flex:1 1 auto; min-width:0; font:12px inherit; padding:4px 6px;
+  background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:5px;
+}
+.dw input:focus{outline:1px solid var(--accent); outline-offset:-1px}
+.dw input.bad{border-color:var(--ng)}
+.dw button{width:22px; height:24px; font-size:11px; flex:0 0 auto; color:var(--dim)}
+.dot{width:7px; height:7px; border-radius:50%; background:var(--dim); flex:0 0 auto}
+.dot.ok{background:var(--ok)} .dot.wait{background:var(--warn); animation:blink 1s infinite}
+.dot.ng{background:var(--ng)}
+@keyframes blink{50%{opacity:.25}}
+
+#toast{
+  position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+  background:var(--panel); border:1px solid var(--line); color:var(--text);
+  padding:6px 13px; border-radius:16px; font-size:12px; opacity:0;
+  transition:opacity .2s; pointer-events:none; z-index:40; white-space:nowrap;
+  box-shadow:0 4px 14px rgba(0,0,0,.3); max-width:92%;
+}
+#toast.show{opacity:1}
+#away{
+  display:none; height:100vh; align-items:center; justify-content:center;
+  flex-direction:column; gap:10px; color:var(--dim); font-size:13px; text-align:center; padding:20px;
+}
+body.pip #away{display:flex}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <div class="row">
+      <button class="ico" id="editBtn" title="テキストを貼り付け / 編集">✎</button>
+      <button class="ico" id="prev" title="前の文 (←)">⏮</button>
+      <button id="play" title="再生 / 一時停止 (Space)">▶</button>
+      <button class="ico" id="next" title="次の文 (→)">⏭</button>
+      <div class="rate">
+        <input type="range" id="hrate" min="0.5" max="2.5" step="0.1" value="1.2" title="読み上げ速度">
+        <span id="rateVal" title="クリックで1.0xに戻す">1.2x</span>
+      </div>
+      <button class="ico" id="pip" title="最前面の小窓で表示">⧉</button>
+      <button class="ico" id="gear" title="設定">⚙</button>
+    </div>
+    <div class="prow">
+      <span id="who"></span>
+      <div id="bar"><div id="fill"></div></div>
+      <span id="count">0 / 0</span>
+    </div>
+  </header>
+
+  <div id="body"><div id="read"></div></div>
+
+  <div id="edit" class="show">
+    <textarea id="ta" placeholder="ここに論文のテキストを貼り付け (Ctrl+V)&#10;&#10;PDFからコピーした改行やページ番号は自動で整形されます。&#10;英単語は読み上げが不自然になるので、気になる箇所はここでカタカナに直しておくと聞きやすいです。"></textarea>
+    <div class="erow">
+      <button id="load">読み込んで再生</button>
+      <label class="chk"><input type="checkbox" id="clean" checked>整形</label>
+    </div>
+    <div class="hint">読み込むと文ごとに区切られ、読んでいる文がハイライトされます。文をクリックするとそこから再生。</div>
+  </div>
+
+  <div id="pane">
+    <div class="ph"><b>設定</b><button class="ico" id="paneClose">✕</button></div>
+    <div class="f">
+      <label>音声</label>
+      <select id="voice"></select>
+    </div>
+    <div class="f">
+      <label>VOICEVOX</label>
+      <div id="vvState"><span class="dot" id="vvDot"></span><span id="vvMsg">確認中…</span></div>
+    </div>
+    <div class="f">
+      <label>英単語の読み<span class="val" id="dictCount"></span></label>
+      <div id="dictList"></div>
+      <div class="dw dw-add">
+        <input id="addEn" placeholder="英単語" spellcheck="false">
+        <input id="addKana" placeholder="カタカナ">
+        <button id="addBtn" title="追加">＋</button>
+      </div>
+      <div class="hint">読み込み時に、読めない英単語を自動でカタカナ化して登録します。<b>本文中の英単語を右クリック</b>すればその場で直せます。直した内容はずっと残ります。</div>
+    </div>
+    <div class="f">
+      <label>読み上げ速度<span class="val" id="rv">1.2x</span></label>
+      <input type="range" id="rate" min="0.5" max="2.5" step="0.1" value="1.2">
+    </div>
+    <div class="f">
+      <label>文字サイズ<span class="val" id="fv">15px</span></label>
+      <input type="range" id="fsize" min="12" max="24" step="1" value="15">
+    </div>
+    <div class="f">
+      <label>テーマ</label>
+      <select id="theme">
+        <option value="dark">ダーク</option>
+        <option value="light">ライト</option>
+      </select>
+    </div>
+    <div class="f">
+      <label>キーボード</label>
+      <div class="keys">
+        <kbd>Space</kbd> 再生 / 一時停止<br>
+        <kbd>←</kbd> <kbd>→</kbd> 前の文 / 次の文<br>
+        <kbd>Shift</kbd>+<kbd>←</kbd> <kbd>→</kbd> 速度を下げる / 上げる<br>
+        <kbd>Esc</kbd> 停止
+      </div>
+    </div>
+  </div>
+
+  <div id="wbar">
+    <span id="wbarEn"></span>
+    <input id="wbarKana" placeholder="カタカナ" spellcheck="false">
+    <button id="wbarSave">保存</button>
+    <button id="wbarDel" title="登録を削除">×</button>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<div id="away">
+  <div>📌 最前面の小窓で表示中</div>
+  <div style="font-size:11px">このタブを閉じると小窓も閉じます。<br>開いたままにしておいてください。</div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const synth = window.speechSynthesis;
+const KEY = 'yomiage.v2';
+const VV = 'http://127.0.0.1:50021';
+
+const el = {};
+['app','read','body','edit','ta','play','prev','next','hrate','rateVal','bar','fill','count','who',
+ 'pane','toast','voice','rate','rv','fsize','fv','theme','clean','pip','editBtn',
+ 'vvDot','vvMsg','wbar','wbarEn','wbarKana','wbarSave','wbarDel','addEn','addKana'].forEach(k => el[k] = $(k));
+
+const st = {
+  raw:'', sents:[], i:0, playing:false, paused:false, loading:false,
+  rate:1.2, sel:'', fsize:15, theme:'dark', clean:true,
+};
+let seq = 0;      // 発話の世代番号。cancel() 由来の幽霊イベントを弾く
+let pipWin = null;
+
+/* ================= テキスト整形 ================= */
+function cleanText(raw){
+  let t = raw.replace(/\r\n?/g, '\n').replace(/ /g, ' ');
+
+  t = t.split('\n').filter(l => {              // ページ番号だけの行を捨てる
+    const s = l.trim();
+    return !(s && /^[-–—\s]*\d{1,4}[-–—\s]*$/.test(s));
+  }).join('\n');
+
+  t = t.replace(/([A-Za-z])[-‐-]\n\s*([a-z])/g, '$1$2');   // 英単語の行末ハイフン分断
+  t = t.replace(/\[\d{1,3}(\s*[,–-]\s*\d{1,3})*\]/g, '');  // 脚注・引用番号
+  t = t.replace(/[ \t]+/g, ' ');
+
+  const out = [];                              // 文中の改行を繋ぐ（空行は段落として残す）
+  for (let line of t.split('\n')){
+    line = line.trim();
+    if (!line){ if (out[out.length-1] !== '') out.push(''); continue; }
+    const prev = out[out.length-1];
+    if (prev && !/[。．！？!?：:；;」』）\)]$/.test(prev)){
+      const sp = /[A-Za-z0-9,.]$/.test(prev) && /^[A-Za-z0-9(“"']/.test(line) ? ' ' : '';
+      out[out.length-1] = prev + sp + line;
+    } else out.push(line);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// 長い文は読点で割る。読み上げが途中で切れる事故と、シークの粒度を同時に解決する
+const MAXLEN = 90;
+function split(text){
+  const res = [];
+  text.split(/\n\s*\n|\n/).map(p => p.trim()).filter(Boolean).forEach((p, pi) => {
+    const parts = p.match(/[^。．！？!?]*[。．！？!?]+[」』）\)"']*|[^。．！？!?]+$/g) || [p];
+    parts.forEach(part => {
+      const s = part.trim();
+      if (!s) return;
+      if (s.length <= MAXLEN){ res.push({t:s, p:pi}); return; }
+      const subs = s.match(/[^、,]*[、,]+|[^、,]+$/g) || [s];
+      let buf = '';
+      for (const sub of subs){
+        if (buf && (buf + sub).length > MAXLEN){ res.push({t:buf, p:pi}); buf = sub; }
+        else buf += sub;
+      }
+      if (buf.trim()) res.push({t:buf, p:pi});
+    });
+  });
+  return res;
+}
+
+/* ================= 描画 ================= */
+function render(){
+  el.read.innerHTML = '';
+  let para = null, lastP = -1;
+  st.sents.forEach((s, i) => {
+    if (s.p !== lastP){ para = document.createElement('p'); el.read.appendChild(para); lastP = s.p; }
+    const sp = document.createElement('span');
+    sp.className = 's'; sp.dataset.i = i;
+    // 英単語だけタグで包む。右クリックでその場で読みを直せるようにするため
+    s.t.split(/([A-Za-z][A-Za-z'-]*[A-Za-z])/).forEach((part, j) => {
+      if (!part) return;
+      if (j % 2 === 1){
+        const w = document.createElement('i');
+        w.className = 'w'; w.textContent = part;
+        w.title = '右クリックで読みを設定';
+        sp.appendChild(w);
+      } else sp.appendChild(document.createTextNode(part));
+    });
+    para.appendChild(sp);
+  });
+  paint();
+}
+
+function paint(){
+  const n = st.sents.length;
+  el.read.querySelectorAll('.s').forEach((sp, i) => {
+    sp.classList.toggle('cur', i === st.i);
+    sp.classList.toggle('done', i < st.i);
+  });
+  el.count.textContent = n ? `${st.i + 1} / ${n}` : '0 / 0';
+  el.fill.style.width = n ? `${(st.i + 1) / n * 100}%` : '0';
+  el.play.classList.toggle('load', st.loading);
+  el.play.textContent = st.loading ? '' : ((st.playing && !st.paused) ? '⏸' : '▶');
+  el.prev.disabled = el.next.disabled = el.play.disabled = !n;
+}
+
+function scrollToCur(){
+  const cur = el.read.querySelector('.s.cur');
+  if (cur) cur.scrollIntoView({block:'center', behavior:'smooth'});
+}
+
+function toast(msg){
+  el.toast.textContent = msg;
+  el.toast.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.toast.classList.remove('show'), 1800);
+}
+
+/* ================= VOICEVOX ================= */
+const vv = {
+  ready:false, speakers:[], dict:{}, cache:new Map(), audio:new Audio(),
+};
+
+async function vvPing(){
+  try{
+    const c = new AbortController();
+    const timer = setTimeout(() => c.abort(), 1500);
+    const r = await fetch(VV + '/version', {signal:c.signal, cache:'no-store'});
+    clearTimeout(timer);
+    return r.ok;
+  }catch(e){ return false; }
+}
+
+async function vvLoad(){
+  try{
+    const r = await fetch(VV + '/speakers', {cache:'no-store'});
+    vv.speakers = await r.json();
+    vv.ready = true;
+    setVVState('ok', `接続済み — ${vv.speakers.length}キャラ`);
+    fillVoices();
+    vvDictLoad();
+    return true;
+  }catch(e){
+    vv.ready = false;
+    return false;
+  }
+}
+
+function setVVState(kind, msg){
+  el.vvDot.className = 'dot ' + kind;
+  el.vvMsg.textContent = msg;
+}
+
+// エンジンの起動を待つ。ランチャー経由なら数秒〜十数秒で上がってくる
+async function vvWatch(){
+  setVVState('wait', 'エンジンの起動を待っています…');
+  for (let i = 0; i < 45; i++){
+    if (await vvPing()){ await vvLoad(); return; }
+    await new Promise(r => setTimeout(r, 1200));
+  }
+  setVVState('ng', '未接続（ずんだもんを使うにはランチャーから起動）');
+}
+
+// 合成結果は Promise ごとキャッシュ。先読みと本再生で同じ Promise を共有する
+function vvSynth(text, speaker, rate){
+  const key = `${speaker}|${rate}|${text}`;
+  if (vv.cache.has(key)) return vv.cache.get(key);
+
+  const p = (async () => {
+    const q = await fetch(`${VV}/audio_query?speaker=${speaker}&text=${encodeURIComponent(text)}`, {method:'POST'});
+    if (!q.ok) throw new Error('audio_query ' + q.status);
+    const query = await q.json();
+    query.speedScale = rate;
+    const s = await fetch(`${VV}/synthesis?speaker=${speaker}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(query),
+    });
+    if (!s.ok) throw new Error('synthesis ' + s.status);
+    return URL.createObjectURL(await s.blob());
+  })();
+
+  p.catch(() => vv.cache.delete(key));   // 失敗したキャッシュは残さない
+  vv.cache.set(key, p);
+
+  while (vv.cache.size > 24){            // 古いものから捨てる
+    const k = vv.cache.keys().next().value;
+    vv.cache.get(k).then(u => URL.revokeObjectURL(u)).catch(() => {});
+    vv.cache.delete(k);
+  }
+  return p;
+}
+
+function prefetch(i, speaker){
+  for (const j of [i + 1, i + 2]){
+    if (j < st.sents.length) vvSynth(st.sents[j].t, speaker, st.rate).catch(() => {});
+  }
+}
+
+/* ================= 英単語のカタカナ化 =================
+   VOICEVOX は一般的な英単語（machine learning など）は読めるが、辞書に無い
+   専門用語・固有名詞は「ティイアアルエエ…」とアルファベットを1文字ずつ読む。
+   その状態を自動検出し、カタカナに変換してユーザー辞書へ登録する。       */
+
+// アルファベットを1文字ずつ読んだときのカタカナ（VOICEVOX の実測値）
+const AL = {a:'エエ',b:'ビイ',c:'シイ',d:'ディイ',e:'イイ',f:'エフ',g:'ジイ',h:'エイチ',
+  i:'アイ',j:'ジェイ',k:'ケエ',l:'エル',m:'エム',n:'エヌ',o:'オオ',p:'ピイ',q:'キュウ',
+  r:'アアル',s:'エス',t:'ティイ',u:'ユウ',v:'ブイ',w:'ダブリュウ',x:'エックス',y:'ワイ',z:'ズィイ'};
+
+// 子音+母音（a,i,u,e,o の順）
+const CV = {
+  b:['バ','ビ','ブ','ベ','ボ'], c:['カ','シ','ク','セ','コ'], d:['ダ','ディ','ドゥ','デ','ド'],
+  f:['ファ','フィ','フ','フェ','フォ'], g:['ガ','ギ','グ','ゲ','ゴ'], h:['ハ','ヒ','フ','ヘ','ホ'],
+  j:['ジャ','ジ','ジュ','ジェ','ジョ'], k:['カ','キ','ク','ケ','コ'], l:['ラ','リ','ル','レ','ロ'],
+  m:['マ','ミ','ム','メ','モ'], n:['ナ','ニ','ヌ','ネ','ノ'], p:['パ','ピ','プ','ペ','ポ'],
+  q:['クア','クイ','ク','クエ','クオ'], r:['ラ','リ','ル','レ','ロ'], s:['サ','シ','ス','セ','ソ'],
+  t:['タ','ティ','トゥ','テ','ト'], v:['バ','ビ','ブ','ベ','ボ'], w:['ワ','ウィ','ウ','ウェ','ウォ'],
+  x:['クサ','クシ','クス','クセ','クソ'], y:['ヤ','イ','ユ','イェ','ヨ'], z:['ザ','ジ','ズ','ゼ','ゾ'],
+};
+const VI = {a:0, i:1, u:2, e:3, o:4};
+const V1 = ['ア','イ','ウ','エ','オ'];
+// 二重母音カナの先頭 → 母音段。子音と結合させるのに使う（r+ea → リー）
+const V2SEG = {'ア':0, 'イ':1, 'ウ':2, 'エ':3, 'オ':4};
+// 母音が続かない子音
+const C1 = {b:'ブ',c:'ク',d:'ド',f:'フ',g:'グ',h:'',j:'ジ',k:'ク',l:'ル',m:'ム',
+  n:'ン',p:'プ',q:'ク',r:'ル',s:'ス',t:'ト',v:'ブ',w:'',x:'ックス',y:'イ',z:'ズ'};
+// 綴りの塊（長いものから順に照合）
+const PAT = [
+  ['tion','ション'],['sion','ジョン'],['ture','チャー'],['ough','オー'],['augh','オー'],
+  ['tial','シャル'],['cial','シャル'],['ious','アス'],['eous','アス'],
+  ['sch','スク'],['tch','ッチ'],['dge','ッジ'],['igh','アイ'],['ual','ュアル'],
+  ['ph','フ'],['ch','チ'],['sh','シュ'],['th','ス'],['wh','ホ'],['ck','ク'],['gh',''],
+  ['kn','ン'],['wr','ラ'],['qu','クワ'],
+  ['ee','イー'],['ea','イー'],['oo','ウー'],['ou','アウ'],['ow','オウ'],['oi','オイ'],
+  ['oy','オイ'],['au','オー'],['aw','オー'],['ay','エイ'],['ai','エイ'],['ei','エイ'],
+  ['ey','エイ'],['ie','イー'],['oa','オー'],['ue','ュー'],['eu','ュー'],
+];
+// 語尾（先に切り出すと精度が上がる）
+// [綴り, 読み, 直前の子音を取り込むときの母音段(a=0,i=1,u=2,e=3,o=4)。null なら取り込まない]
+// 例: moda|lity → 'l' を語尾に渡して「モダ」+「リティ」にする
+const TAIL = [
+  ['ation','エーション',3],['ition','イション',null],
+  ['tion','ション',null],['sion','ジョン',null],['ment','メント',null],['ness','ネス',null],
+  ['iz','アイズ',0],
+  ['able','アブル',0],['ible','イブル',1],['ical','イカル',1],['ity','イティ',1],
+  ['ive','イブ',1],['ize','アイズ',null],['ise','アイズ',null],['ous','アス',0],
+  ['ed','エド',3],['er','アー',0],['or','アー',0],['ar','アー',0],['ur','アー',0],['ir','アー',0],
+  ['ly','リー',null],['ty','ティー',null],['cy','シー',null],['y','イー',1],
+];
+
+// 論文でよく出る語は変換ルールに頼らず直接持つ
+const BUILTIN = {
+  transformer:'トランスフォーマー', attention:'アテンション', embedding:'エンベディング',
+  embeddings:'エンベディングズ', bert:'バート', gpt:'ジーピーティー', llm:'エルエルエム',
+  dataset:'データセット', datasets:'データセッツ', baseline:'ベースライン',
+  benchmark:'ベンチマーク', supervised:'スーパーバイズド', unsupervised:'アンスーパーバイズド',
+  clustering:'クラスタリング', regression:'リグレッション', classifier:'クラシファイア',
+  classification:'クラシフィケーション', accuracy:'アキュラシー', precision:'プレシジョン',
+  recall:'リコール', overfitting:'オーバーフィッティング', gradient:'グラディエント',
+  convolution:'コンボリューション', convolutional:'コンボリューショナル',
+  recurrent:'リカレント', neural:'ニューラル', network:'ネットワーク', networks:'ネットワークス',
+  layer:'レイヤー', tokenizer:'トークナイザー', token:'トークン', tokens:'トークンズ',
+  prompt:'プロンプト', fine:'ファイン', tuning:'チューニング', pretrained:'プリトレインド',
+  inference:'インファレンス', latency:'レイテンシ', throughput:'スループット',
+  framework:'フレームワーク', algorithm:'アルゴリズム', algorithms:'アルゴリズムズ',
+  parameter:'パラメータ', parameters:'パラメータズ', threshold:'スレッショルド',
+  validation:'バリデーション', evaluation:'エバリュエーション', annotation:'アノテーション',
+  corpus:'コーパス', semantic:'セマンティック', syntactic:'シンタクティック',
+  covid:'コビッド', github:'ギットハブ', python:'パイソン', javascript:'ジャバスクリプト',
+  api:'エーピーアイ', ui:'ユーアイ', ux:'ユーエックス', iot:'アイオーティー',
+  usability:'ユーサビリティ', interface:'インターフェース', interaction:'インタラクション',
+  qualitative:'クオリタティブ', quantitative:'クオンティタティブ',
+  questionnaire:'クエスチョネア', participants:'パーティシパンツ', survey:'サーベイ',
+};
+
+// 全角英字を半角に落として小文字化
+function normEn(s){
+  return String(s).replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+                  .toLowerCase();
+}
+
+function katakanize(word){
+  let w = normEn(word).replace(/[^a-z]/g, '');
+  if (w.length < 2) return '';
+  const direct = BUILTIN[w];
+  if (direct) return direct;
+
+  w = w.replace(/([bcdfglmnprstz])\1/g, '$1');   // 重子音を1つに（embedding→embeding）
+  w = w.replace(/([^aeiou])e$/, '$1');           // 語尾のサイレント e
+
+  // 語尾を先に確定させる
+  let tail = '';
+  if (w.length > 4 && w.endsWith('ing')){
+    const before = w.slice(0, -3);
+    const last = before[before.length - 1];
+    if (CV[last] && VI[last] === undefined){     // 直前の子音は ing 側に付く
+      tail = CV[last][1] + 'ング'; w = before.slice(0, -1);
+    } else { tail = 'イング'; w = before; }
+  } else {
+    for (const [p, k, vseg] of TAIL){
+      if (w.length <= p.length + 1 || !w.endsWith(p)) continue;
+      let rest = w.slice(0, -p.length);
+      const last = rest[rest.length - 1];
+      if (vseg !== null && CV[last] && VI[last] === undefined){
+        tail = CV[last][vseg] + k.slice(1);   // 直前の子音を語尾側の音節に組み込む
+        rest = rest.slice(0, -1);
+      } else {
+        tail = k;
+      }
+      w = rest;
+      break;
+    }
+  }
+
+  let out = '', i = 0;
+  while (i < w.length){
+    let hit = null;
+    for (const [p, k] of PAT){ if (w.startsWith(p, i)){ hit = [p, k]; break; } }
+    if (hit){ out += hit[1]; i += hit[0].length; continue; }
+
+    const c = w[i], n = w[i + 1];
+    if (VI[c] !== undefined){ out += V1[VI[c]]; i++; continue; }
+    if (CV[c] && n && VI[n] !== undefined){
+      // 続きが二重母音なら子音とまとめて1音節にする（r+ea → リー、d+ata ではない）
+      const d2 = PAT.find(([p, k]) => p.length === 2 && VI[p[0]] !== undefined
+                          && V2SEG[k[0]] !== undefined && w.startsWith(p, i + 1));
+      if (d2){ out += CV[c][V2SEG[d2[1][0]]] + d2[1].slice(1); i += 3; continue; }
+      out += CV[c][VI[n]]; i += 2; continue;
+    }
+    if (c === 'n' || c === 'm'){ out += 'ン'; i++; continue; }        // 撥音
+    if (c === 'r' && i > 0 && VI[w[i-1]] !== undefined){ out += 'ー'; i++; continue; }
+    out += (C1[c] ?? ''); i++;
+  }
+  out += tail;
+
+  // 短母音+語尾の破裂音は促音が入る（set→セット）。撥音・長音の後には入れない
+  out = out.replace(/(.)([クトプグドブ])$/, (m, a, b) => /[ンッー]/.test(a) ? m : a + 'ッ' + b);
+  return out.replace(/ンン+/g, 'ン');
+}
+
+function isAcronym(w){ return /^[A-Z]{2,5}$/.test(w); }
+
+// 読みがアルファベット1文字読みの連結になっていたら「読めていない」。
+// 文字によっては文脈で読みが揺れる（z が「ゼット」でなく「ズィイ」になる等）ため、
+// 完全一致ではなく「各文字の読みが順番どおり並んでいるか」で判定する
+function isSpelledOut(word, kana){
+  const w = normEn(word).replace(/[^a-z]/g, '');
+  const got = kana.replace(/['\/、_]/g, '');
+  if (w.length < 2 || !got) return false;
+
+  let pos = 0, hit = 0;
+  for (const c of w){
+    const k = AL[c];
+    if (!k) continue;
+    const idx = got.indexOf(k, pos);
+    if (idx >= 0){ pos = idx + k.length; hit++; }
+  }
+  // 8割の文字が1文字読みで並び、かつ全体が1文字あたり2カナ以上に膨らんでいること
+  return hit >= w.length * 0.8 && got.length >= w.length * 2;
+}
+
+async function pmap(arr, n, fn){
+  const out = new Array(arr.length);
+  let i = 0;
+  await Promise.all(Array.from({length: Math.min(n, arr.length)}, async () => {
+    while (i < arr.length){ const j = i++; out[j] = await fn(arr[j]); }
+  }));
+  return out;
+}
+
+/* --- ユーザー辞書 API --- */
+async function vvDictLoad(){
+  try{
+    const r = await fetch(VV + '/user_dict', {cache:'no-store'});
+    vv.dict = await r.json();
+  }catch(e){ vv.dict = {}; }
+  renderDict();
+}
+async function vvWordAdd(surface, pron){
+  try{
+    const r = await fetch(`${VV}/user_dict_word?surface=${encodeURIComponent(surface)}`
+      + `&pronunciation=${encodeURIComponent(pron)}&accent_type=0`, {method:'POST'});
+    return r.ok;
+  }catch(e){ return false; }
+}
+async function vvWordPut(uuid, surface, pron){
+  try{
+    const r = await fetch(`${VV}/user_dict_word/${uuid}?surface=${encodeURIComponent(surface)}`
+      + `&pronunciation=${encodeURIComponent(pron)}&accent_type=0`, {method:'PUT'});
+    return r.ok;
+  }catch(e){ return false; }
+}
+async function vvWordDel(uuid){
+  try{ await fetch(`${VV}/user_dict_word/${uuid}`, {method:'DELETE'}); }catch(e){}
+}
+
+async function scanEnglish(text){
+  if (!vv.ready) return 0;
+
+  const found = new Map();                       // 正規化した綴り -> 元の綴り
+  for (const raw of (text.match(/[A-Za-z][A-Za-z'-]*/g) || [])){
+    for (const p of raw.split(/[-']/)){          // ハイフン語は VOICEVOX が別々に読む
+      if (p.length < 3) continue;
+      const k = normEn(p);
+      if (!found.has(k)) found.set(k, p);
+    }
+  }
+  const known = new Set(Object.values(vv.dict || {}).map(d => normEn(d.surface)));
+  const todo = [...found].filter(([k]) => !known.has(k));
+  if (!todo.length) return 0;
+
+  const kanas = await pmap(todo, 6, async ([, orig]) => {
+    try{
+      const r = await fetch(`${VV}/audio_query?speaker=3&text=${encodeURIComponent(orig)}`, {method:'POST'});
+      return (await r.json()).kana || '';
+    }catch(e){ return ''; }
+  });
+
+  let n = 0;
+  for (let i = 0; i < todo.length; i++){
+    const [key, orig] = todo[i];
+    if (!isSpelledOut(orig, kanas[i])) continue;      // ちゃんと読めているものは触らない
+    if (isAcronym(orig) && !BUILTIN[key]) continue;   // AI・GPU などは1文字読みが正しい
+    const kana = BUILTIN[key] || katakanize(orig);
+    if (!kana || !/^[ァ-ヶー]+$/.test(kana)) continue;
+    if (await vvWordAdd(orig, kana)) n++;
+  }
+  if (n){ vv.cache.clear(); await vvDictLoad(); }
+  return n;
+}
+
+/* --- 読みの即時編集バー --- */
+const wbar = {uuid:null, surface:''};
+
+function openWordBar(word){
+  if (!vv.ready){ toast('VOICEVOXに接続していません'); return; }
+  const key = normEn(word);
+  const found = Object.entries(vv.dict || {}).find(([, d]) => normEn(d.surface) === key);
+  wbar.uuid    = found ? found[0] : null;
+  wbar.surface = found ? found[1].surface : word;
+
+  el.wbarEn.textContent = word;
+  el.wbarEn.title = word;
+  el.wbarKana.value = found ? found[1].pronunciation : katakanize(word);  // 未登録なら候補を入れておく
+  el.wbarKana.classList.remove('bad');
+  el.wbarDel.style.display = found ? '' : 'none';
+  el.wbar.classList.add('show');
+  el.wbarKana.focus();
+  el.wbarKana.select();
+}
+
+function closeWordBar(){
+  el.wbar.classList.remove('show');
+  el.wbarKana.blur();
+}
+
+async function saveWordBar(){
+  const v = el.wbarKana.value.trim();
+  if (!/^[ァ-ヶー]+$/.test(v)){
+    el.wbarKana.classList.add('bad');
+    toast('カタカナで入力してください');
+    return;
+  }
+  const ok = wbar.uuid ? await vvWordPut(wbar.uuid, wbar.surface, v)
+                       : await vvWordAdd(wbar.surface, v);
+  if (!ok){ el.wbarKana.classList.add('bad'); toast('登録できませんでした'); return; }
+
+  vv.cache.clear();                 // 読みが変わったので合成済みの音声を捨てる
+  await vvDictLoad();
+  closeWordBar();
+  toast(`「${v}」で登録しました`);
+  if (st.playing) speakAt(st.i);    // その場で読み直す
+}
+
+function renderDict(){
+  const list = $('dictList');
+  if (!list) return;
+  list.innerHTML = '';
+  const es = Object.entries(vv.dict || {});
+  $('dictCount').textContent = es.length ? es.length + '語' : '';
+  es.sort((a, b) => normEn(a[1].surface).localeCompare(normEn(b[1].surface)));
+
+  for (const [uuid, d] of es){
+    const row = document.createElement('div'); row.className = 'dw';
+    const en = document.createElement('span'); en.className = 'en';
+    en.textContent = en.title = normEn(d.surface);
+
+    const inp = document.createElement('input');
+    inp.value = d.pronunciation;
+    inp.onchange = async () => {
+      const v = inp.value.trim();
+      const ok = /^[ァ-ヶー]+$/.test(v) && await vvWordPut(uuid, d.surface, v);
+      inp.classList.toggle('bad', !ok);
+      if (ok){ vv.cache.clear(); await vvDictLoad(); toast('読みを更新しました'); }
+    };
+
+    const del = document.createElement('button');
+    del.textContent = '×'; del.title = 'この登録を削除';
+    del.onclick = async () => { await vvWordDel(uuid); vv.cache.clear(); await vvDictLoad(); };
+
+    row.append(en, inp, del);
+    list.appendChild(row);
+  }
+}
+
+/* ================= 再生 ================= */
+function curSel(){
+  const v = st.sel || '';
+  const [kind, id] = [v.slice(0, v.indexOf(':')), v.slice(v.indexOf(':') + 1)];
+  return {kind, id};
+}
+
+function speakAt(i){
+  seq++;
+  const my = seq;
+  synth.cancel();
+  vv.audio.pause();
+  st.loading = false;
+
+  if (i < 0) i = 0;
+  if (i >= st.sents.length){ stop(); st.i = st.sents.length - 1; paint(); return; }
+
+  st.i = i; st.playing = true; st.paused = false;
+  paint(); scrollToCur(); save();
+
+  const sel = curSel();
+  if (sel.kind === 'vv') playVV(i, my, parseInt(sel.id, 10));
+  else playWeb(i, my, sel.id);
+}
+
+function playWeb(i, my, voiceURI){
+  const u = new SpeechSynthesisUtterance(st.sents[i].t);
+  const v = synth.getVoices().find(x => x.voiceURI === voiceURI)
+         || synth.getVoices().find(x => /ja[-_]JP/i.test(x.lang));
+  if (v) u.voice = v;
+  u.lang = 'ja-JP';
+  u.rate = st.rate;
+  u.onend = () => { if (my === seq && st.playing) speakAt(i + 1); };
+  u.onerror = e => { if (my === seq && st.playing && e.error !== 'interrupted') speakAt(i + 1); };
+  // cancel() 直後の speak() は Chromium で無視されることがあるので一拍置く
+  setTimeout(() => { if (my === seq) synth.speak(u); }, 60);
+}
+
+async function playVV(i, my, speaker){
+  let url;
+  const slow = setTimeout(() => { if (my === seq){ st.loading = true; paint(); } }, 250);
+  try{
+    url = await vvSynth(st.sents[i].t, speaker, st.rate);
+  }catch(e){
+    clearTimeout(slow);
+    if (my !== seq) return;
+    st.loading = false;
+    stop();
+    setVVState('ng', '接続が切れました');
+    vv.ready = false;
+    toast('VOICEVOXに接続できません');
+    return;
+  }
+  clearTimeout(slow);
+  if (my !== seq) return;
+
+  st.loading = false;
+  paint();
+  vv.audio.src = url;
+  vv.audio.onended = () => { if (my === seq && st.playing) speakAt(i + 1); };
+  try{ await vv.audio.play(); }catch(e){ /* 中断は無視 */ }
+  prefetch(i, speaker);
+}
+
+function stop(){
+  seq++;
+  st.playing = false; st.paused = false; st.loading = false;
+  synth.cancel();
+  vv.audio.pause();
+  paint();
+}
+
+function toggle(){
+  if (!st.sents.length) return;
+  if (!st.playing){ speakAt(st.i); return; }
+  const isVV = curSel().kind === 'vv';
+  if (st.paused){
+    if (isVV) vv.audio.play().catch(() => {}); else synth.resume();
+    st.paused = false;
+  } else {
+    if (isVV) vv.audio.pause(); else synth.pause();
+    st.paused = true;
+  }
+  paint();
+}
+
+function jump(d){
+  const t = st.i + d;
+  if (t < 0){ toast('先頭です'); return; }
+  if (t >= st.sents.length){ toast('最後です'); return; }
+  if (st.playing) speakAt(t);
+  else { st.i = t; paint(); scrollToCur(); save(); }
+}
+
+let rateTimer = null;
+function setRate(r, replay = true){
+  st.rate = Math.min(2.5, Math.max(0.5, Math.round(r * 10) / 10));
+  el.rate.value = el.hrate.value = st.rate;        // ヘッダーと設定パネルを同期
+  el.rv.textContent = el.rateVal.textContent = st.rate.toFixed(1) + 'x';
+  save();
+  if (!replay || !st.playing || st.paused) return;
+  // VOICEVOX は速度ごとに合成し直しになるので、スライダー操作中は待つ
+  clearTimeout(rateTimer);
+  rateTimer = setTimeout(() => speakAt(st.i), curSel().kind === 'vv' ? 450 : 0);
+}
+
+/* ================= 読み込み ================= */
+function load(text){
+  st.raw = text;
+  st.sents = split(st.clean ? cleanText(text) : text);
+  st.i = 0;
+  if (!st.sents.length){ toast('テキストがありません'); return; }
+  render();
+  showEdit(false);
+  save();
+}
+
+function showEdit(on){
+  el.edit.classList.toggle('show', on);
+  el.body.classList.toggle('hide', on);
+  el.editBtn.classList.toggle('on', on);
+  if (on){ stop(); el.ta.focus(); }
+}
+
+/* ================= 保存 ================= */
+function save(){
+  try{
+    localStorage.setItem(KEY, JSON.stringify({
+      raw:st.raw, i:st.i, rate:st.rate, sel:st.sel,
+      fsize:st.fsize, theme:st.theme, clean:st.clean,
+    }));
+  }catch(e){}
+}
+
+function restore(){
+  let d = {};
+  try{ d = JSON.parse(localStorage.getItem(KEY) || '{}'); }catch(e){}
+  st.rate  = d.rate  ?? 1.2;
+  st.fsize = d.fsize ?? 15;
+  st.theme = d.theme ?? 'dark';
+  st.clean = d.clean ?? true;
+  st.sel   = d.sel   || '';
+
+  el.clean.checked = st.clean;
+  el.theme.value = st.theme;
+  setTheme(st.theme);
+  setFontSize(st.fsize);
+  setRate(st.rate, false);
+
+  if (d.raw){
+    el.ta.value = d.raw;
+    load(d.raw);
+    st.i = Math.min(d.i || 0, st.sents.length - 1);
+    paint();
+    setTimeout(scrollToCur, 60);
+  }
+}
+
+function setTheme(v){
+  st.theme = v;
+  document.body.classList.toggle('light', v === 'light');
+  if (pipWin) pipWin.document.body.classList.toggle('light', v === 'light');
+  save();
+}
+function setFontSize(n){
+  st.fsize = n;
+  el.read.style.fontSize = n + 'px';
+  el.fv.textContent = n + 'px';
+  el.fsize.value = n;
+  save();
+}
+
+/* ================= 音声一覧 ================= */
+function fillVoices(){
+  const web = synth.getVoices().filter(v => /ja[-_]JP/i.test(v.lang));
+  if (!web.length && !vv.ready) return;
+
+  el.voice.innerHTML = '';
+
+  if (vv.ready && vv.speakers.length){
+    const g = document.createElement('optgroup');
+    g.label = 'VOICEVOX';
+    // ずんだもんは真っ先に出す
+    const sorted = [...vv.speakers].sort((a, b) =>
+      (b.name.includes('ずんだもん') ? 1 : 0) - (a.name.includes('ずんだもん') ? 1 : 0));
+    sorted.forEach(sp => sp.styles.forEach(s => {
+      const o = document.createElement('option');
+      o.value = 'vv:' + s.id;
+      o.textContent = `${sp.name} (${s.name})`;
+      g.appendChild(o);
+    }));
+    el.voice.appendChild(g);
+  }
+
+  if (web.length){
+    const g = document.createElement('optgroup');
+    g.label = 'ブラウザ音声';
+    web.forEach(v => {
+      const o = document.createElement('option');
+      o.value = 'web:' + v.voiceURI;
+      o.textContent = v.name.replace(/^Microsoft /, '');
+      g.appendChild(o);
+    });
+    el.voice.appendChild(g);
+  }
+
+  const has = v => !!el.voice.querySelector(`option[value="${CSS.escape(v)}"]`);
+  if (!st.sel || !has(st.sel)){
+    // 初期値: ずんだもん(ノーマル) → Natural系ブラウザ音声 → 先頭
+    const opts = [...el.voice.querySelectorAll('option')];
+    const zunda = opts.find(o => /ずんだもん \(ノーマル\)/.test(o.textContent));
+    const nice  = opts.find(o => /Natural|七海|Nanami/i.test(o.textContent));
+    const use = zunda || nice || opts[0];
+    if (use) st.sel = use.value;
+  }
+  el.voice.value = st.sel;
+  updateWho();
+  save();
+}
+
+function updateWho(){
+  const o = el.voice.selectedOptions[0];
+  el.who.textContent = o ? o.textContent.replace(/ \(ノーマル\)/, '') : '';
+  el.who.title = o ? o.textContent : '';
+}
+
+synth.onvoiceschanged = fillVoices;
+setTimeout(fillVoices, 300);
+
+/* ================= 最前面（Document PiP） ================= */
+function pipSupported(){ return 'documentPictureInPicture' in window; }
+
+async function togglePip(){
+  if (pipWin){ pipWin.close(); return; }
+  if (!pipSupported()){ toast('この環境では最前面にできません'); return; }
+
+  const text = el.ta.value, caret = el.ta.selectionStart;
+  pipWin = await documentPictureInPicture.requestWindow({width:400, height:560});
+
+  const style = pipWin.document.createElement('style');
+  style.textContent = $('appstyle').textContent;
+  pipWin.document.head.appendChild(style);
+  if (st.theme === 'light') pipWin.document.body.classList.add('light');
+
+  pipWin.document.body.appendChild(el.app);   // ノードごと引っ越し。状態もリスナーも保たれる
+  el.ta.value = text;
+  try{ el.ta.setSelectionRange(caret, caret); }catch(e){}
+
+  bindKeys(pipWin.document);
+  document.body.classList.add('pip');
+  el.pip.classList.add('on');
+  el.pip.title = '元のウィンドウに戻す';
+  scrollToCur();
+
+  pipWin.addEventListener('pagehide', () => {
+    const t2 = el.ta.value;
+    document.body.appendChild(el.app);
+    el.ta.value = t2;
+    document.body.classList.remove('pip');
+    el.pip.classList.remove('on');
+    el.pip.title = '最前面の小窓で表示';
+    pipWin = null;
+    scrollToCur();
+  });
+}
+
+/* ================= キーボード ================= */
+function bindKeys(doc){
+  if (doc._bound) return;
+  doc._bound = true;
+  doc.addEventListener('keydown', e => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'textarea' || tag === 'select' || tag === 'input') return;
+    if (e.key === ' '){ e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowLeft'){ e.preventDefault(); e.shiftKey ? setRate(st.rate - 0.1) : jump(-1); }
+    else if (e.key === 'ArrowRight'){ e.preventDefault(); e.shiftKey ? setRate(st.rate + 0.1) : jump(1); }
+    else if (e.key === 'Escape'){
+      if (el.wbar.classList.contains('show')){ closeWordBar(); return; }
+      el.pane.classList.remove('show'); stop();
+    }
+  });
+}
+bindKeys(document);
+
+/* ================= イベント ================= */
+el.play.onclick = toggle;
+el.prev.onclick = () => jump(-1);
+el.next.onclick = () => jump(1);
+el.pip.onclick  = togglePip;
+$('gear').onclick = () => el.pane.classList.add('show');
+$('paneClose').onclick = () => el.pane.classList.remove('show');
+el.editBtn.onclick = () => showEdit(!el.edit.classList.contains('show'));
+
+$('load').onclick = async () => {
+  const t = el.ta.value.trim();
+  if (!t){ toast('テキストを貼り付けてください'); return; }
+  load(t);
+  if (curSel().kind === 'vv' && vv.ready){
+    st.loading = true; paint();                 // 読めない英単語を先に登録してから再生する
+    let n = 0;
+    try{ n = await scanEnglish(t); }catch(e){}
+    st.loading = false;
+    if (n) toast(`${n}語の英単語をカタカナ登録しました`);
+  }
+  speakAt(0);
+};
+
+el.clean.onchange = () => { st.clean = el.clean.checked; save(); if (st.raw) load(st.raw); };
+el.rate.oninput = () => setRate(parseFloat(el.rate.value));
+el.fsize.oninput = () => setFontSize(parseInt(el.fsize.value, 10));
+el.theme.onchange = () => setTheme(el.theme.value);
+
+el.voice.onchange = () => {
+  st.sel = el.voice.value;
+  updateWho();
+  save();
+  if (st.playing && !st.paused) speakAt(st.i);
+};
+
+el.hrate.oninput = () => setRate(parseFloat(el.hrate.value));
+el.rateVal.onclick = () => setRate(1.0);      // 数値をクリックで等倍に戻す
+
+el.read.onclick = e => {
+  const w = e.target.closest('.w');
+  if (w && (e.ctrlKey || e.metaKey)){          // Ctrl+クリックでも読みを編集できる
+    e.preventDefault(); e.stopPropagation();
+    openWordBar(w.textContent);
+    return;
+  }
+  const sp = e.target.closest('.s');
+  if (sp) speakAt(parseInt(sp.dataset.i, 10));
+};
+
+el.read.addEventListener('contextmenu', e => {
+  const w = e.target.closest('.w');
+  if (!w) return;
+  e.preventDefault();
+  openWordBar(w.textContent);
+});
+
+el.wbarSave.onclick = saveWordBar;
+el.wbarDel.onclick = async () => {
+  if (wbar.uuid){
+    await vvWordDel(wbar.uuid);
+    vv.cache.clear();
+    await vvDictLoad();
+    toast('登録を削除しました');
+    if (st.playing) speakAt(st.i);
+  }
+  closeWordBar();
+};
+el.wbarKana.onkeydown = e => {
+  if (e.key === 'Enter'){ e.preventDefault(); saveWordBar(); }
+  else if (e.key === 'Escape'){ e.preventDefault(); closeWordBar(); }
+};
+
+$('addBtn').onclick = async () => {
+  const en = el.addEn.value.trim(), kana = el.addKana.value.trim();
+  if (!en || !/^[A-Za-z][A-Za-z'-]*$/.test(en)){ el.addEn.classList.add('bad'); toast('英単語を入力してください'); return; }
+  if (!/^[ァ-ヶー]+$/.test(kana)){ el.addKana.classList.add('bad'); toast('カタカナで入力してください'); return; }
+  el.addEn.classList.remove('bad'); el.addKana.classList.remove('bad');
+
+  const key = normEn(en);
+  const found = Object.entries(vv.dict || {}).find(([, d]) => normEn(d.surface) === key);
+  const ok = found ? await vvWordPut(found[0], found[1].surface, kana) : await vvWordAdd(en, kana);
+  if (!ok){ toast('登録できませんでした'); return; }
+
+  vv.cache.clear();
+  await vvDictLoad();
+  el.addEn.value = el.addKana.value = '';
+  toast(`${en} を登録しました`);
+};
+el.addKana.onkeydown = e => { if (e.key === 'Enter'){ e.preventDefault(); $('addBtn').click(); } };
+el.addEn.oninput = () => {
+  if (!el.addKana.value && el.addEn.value.length > 2) el.addKana.placeholder = katakanize(el.addEn.value) || 'カタカナ';
+};
+
+el.bar.onclick = e => {
+  if (!st.sents.length) return;
+  const r = el.bar.getBoundingClientRect();
+  const i = Math.min(st.sents.length - 1,
+            Math.floor((e.clientX - r.left) / r.width * st.sents.length));
+  if (st.playing) speakAt(i);
+  else { st.i = i; paint(); scrollToCur(); save(); }
+};
+
+window.addEventListener('pagehide', () => { synth.cancel(); vv.audio.pause(); });
+
+if (!pipSupported()){
+  el.pip.disabled = true;
+  el.pip.title = '最前面表示は Chrome / Edge 116 以降で使えます';
+}
+
+/* ================= 起動 ================= */
+restore();
+(async () => {
+  if (await vvPing()) await vvLoad();
+  else vvWatch();          // ランチャーが起動中かもしれないので待つ
+})();
+})();
+</script>
+</body>
+</html>

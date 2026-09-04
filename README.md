@@ -111,6 +111,11 @@ sed -n '/<script>/,/<\/script>/p' reader.html | sed '1d;$d' > /tmp/reader.js && 
 
 このリポジトリのコードは [MIT](LICENSE)。
 
-VOICEVOX ENGINE と音声ライブラリは同梱していない。利用にあたっては
-[VOICEVOX の利用規約](https://voicevox.hiroshiba.jp/term/) と各キャラクターの規約に従うこと。
-作成した音声を公開する場合は「VOICEVOX:ずんだもん」のようなクレジット表記が必要になる。
+VOICEVOX ENGINE と音声ライブラリは同梱していない。このアプリは
+エンジンの HTTP API（`127.0.0.1:50021`）を呼ぶだけで、エンジンの中身には触れていない。
+
+音声については、[VOICEVOX の利用規約](https://voicevox.hiroshiba.jp/term/) と
+[東北ずん子プロジェクトの音源利用規約](https://zunko.jp/con_ongen_kiyaku.html) に従うこと。
+音源利用規約はクレジット表記を求めており（例：`VOICEVOX:ずんだもん`）、アプリでの利用では
+紹介画面などへの記載が必要とされているため、**設定パネルにクレジットを表示している**。
+作成した音声を動画などで公開する場合も、同じ形式のクレジット表記が必要になる。
